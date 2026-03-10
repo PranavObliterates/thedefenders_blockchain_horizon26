@@ -53,6 +53,29 @@ async function main() {
   await deployed.INFY.allocateShares(trader3.address, 100);
   await deployed.HDFCBANK.allocateShares(trader2.address, 300);
 
+  // =========================================================
+  // APPROVE SettlementEngine to move tokens on behalf of traders
+  // Without this, settleTrade() will revert with:
+  //   "Buyer has not approved enough tINR"
+  //   "Seller has not approved enough shares"
+  // =========================================================
+  const maxApproval = hre.ethers.utils.parseEther("999999999");
+
+  // Each trader approves the engine to spend their tINR
+  await tINR.connect(trader1).approve(engine.address, maxApproval);
+  await tINR.connect(trader2).approve(engine.address, maxApproval);
+  await tINR.connect(trader3).approve(engine.address, maxApproval);
+  console.log("All traders approved SettlementEngine for tINR");
+
+  // Each trader approves the engine to move ALL share tokens they may hold
+  const allTraders = [trader1, trader2, trader3];
+  for (const stock of Object.values(deployed)) {
+    for (const trader of allTraders) {
+      await stock.connect(trader).approve(engine.address, maxApproval);
+    }
+  }
+  console.log("All traders approved SettlementEngine for all share tokens");
+
   // Save addresses for backend/frontend integration
   const config = {
     tokenizedINR: tINR.address,
@@ -71,7 +94,8 @@ async function main() {
   };
 
   fs.writeFileSync("deployed-addresses.json", JSON.stringify(config, null, 2));
-  console.log("Deployment complete. Addresses saved to deployed-addresses.json");
+  console.log("Addresses written to deployed-addresses.json");
+  console.log("Demo setup complete! All traders funded, shares allocated, and approvals set.");
 }
 
 main().catch((error) => {
