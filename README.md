@@ -1,146 +1,203 @@
-# SettleX — Instant (T+0) Settlement PoC for Indian Equities
+# 🏦 SettleX — Instant (T+0) Atomic Settlement for Indian Equities
 
-A small, demo-ready proof-of-concept proving atomic Delivery-versus-Payment (DVP) for tokenized Indian equities and INR. This project shows how money and shares can move in a single, atomic on-chain transaction so trades either complete fully or revert with no partial transfers.
+> **Hackathon:** Horizon26 | **Team:** The Defenders
 
-This repository is built for a hackathon demo: it favors clarity and reproducibility over production hardening.
+A proof-of-concept demonstrating **atomic Delivery-versus-Payment (DVP)** for tokenized Indian equities using blockchain. Trades settle instantly — shares and INR swap in a single atomic transaction with zero counterparty risk.
 
 ---
 
-Highlights
-- Atomic DVP: shares + money swap in one transaction (no counterparty risk).
-- On-chain orderbook with simple auto-matching and automatic settlement.
-- Circuit breakers, failure/penalty tracking, and a minimal regulator-audit trail.
-- TokenizedINR (tINR) — mintable by backend on UPI confirmation (demo only).
-- Demo scripts and tests that reproduce the main flows locally.
+## ✨ Key Features
 
-Tech stack
-- Solidity (0.8.x)
-- Hardhat (development, testing, local node)
-- OpenZeppelin (ERC20 primitives)
-- Mocha + Chai (tests)
-- Node.js scripts for deploy and simple demo setup
+- **⚛️ Atomic DVP Settlement** — Shares + INR swap in one transaction; either both succeed or both revert
+- **📒 On-chain Order Book** — Place buy/sell orders with automatic matching and settlement
+- **🛡️ Circuit Breakers** — NSE-style price band protection per stock
+- **💰 Tokenized INR (tINR)** — 1:1 digital rupee simulation with UPI transaction references
+- **📊 Regulator Dashboard** — Real-time analytics, audit trail, and circuit breaker monitoring
+- **⚠️ Failure Tracking** — Traders flagged after repeated failed settlements
 
-What is implemented (what you will actually see in the demo)
-- Smart contracts:
-  - TokenizedINR — custodial mint/burn for demo UPI-to-onchain flows (owner only).
-  - ShareToken — one ERC20 per stock (1 token = 1 share for PoC).
-  - SettlementEngine — atomic settleTrade(), placeOrder(), auto-match, circuit-breaker and penalties.
-- Tests:
-  - Atomic swap success
-  - Atomic rollback on failure
-  - Circuit breaker triggering
-  - Auto-matching + auto-settlement
-  - Minting tINR via backend-simulated call
-- Deploy script:
-  - Deploy all contracts to a local Hardhat node and seed demo traders with balances and shares.
-  - Writes `deployed-addresses.json` for backend integration.
+---
 
-What this PoC does NOT include
-- Production custody or KYC flows.
-- Real UPI integration (we simulate Razorpay/UPI confirmation — backend will do sandbox).
-- Off-chain settlement finality and integration with CDSL/NSDL.
-- High performance optimizations or gas-cost hardening.
+## 🏗️ Architecture
 
-Quick start (recommended)
-1. Install Node.js (v18+)
-2. From repo root:
-   cd blockchain
-   npm install
-   npx hardhat compile
-   npx hardhat test
-
-3. For an interactive demo (two terminals)
-- Terminal A: start a local node
-  npx hardhat node
-
-- Terminal B: deploy demo contracts and seed traders
-  npx hardhat run scripts/deploy.js --network localhost
-
-The deploy script creates `deployed-addresses.json` in the `blockchain` folder. Share that with the backend.
-
-Windows users: use PowerShell or CMD. Replace `rm -rf ...` with `rmdir /s /q` if needed. If `npm install` fails due to peer-deps, re-run:
 ```
+┌──────────────┐     REST API      ┌──────────────┐     Ethers.js     ┌────────���─────────┐
+│   Frontend   │ ◄──────────────► │   Backend    │ ◄──────────────► │  Hardhat Local   │
+│  (HTML/JS)   │   localhost:3001  │  (Express)   │   localhost:8545  │   Blockchain     │
+│              │                   │              │                   │                  │
+│ • Trader UI  │                   │ • /api/deposit│                  │ • TokenizedINR   │
+│ • Regulator  │                   │ • /api/order │                   │ • ShareToken (×4)│
+│   Dashboard  │                   │ • /api/settle│                   │ • SettlementEngine│
+└──────────────┘                   │ • /api/portfolio               │                  │
+                                   │ • /api/analytics               └──────────────────┘
+                                   └──────────────┘
+```
+
+## 🛠️ Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Smart Contracts | Solidity 0.8.x, OpenZeppelin 5.x |
+| Blockchain | Hardhat 2.x (local node) |
+| Backend | Node.js, Express, Ethers.js v5 |
+| Frontend | Vanilla HTML/CSS/JavaScript |
+| Testing | Mocha, Chai, Hardhat Chai Matchers |
+
+---
+
+## 🚀 Quick Start
+
+### Prerequisites
+- **Node.js** v18 or higher
+- **npm** or **yarn**
+
+### Step 1: Clone & Install
+
+```bash
+git clone https://github.com/PranavObliterates/thedefenders_blockchain_horizon26.git
+cd thedefenders_blockchain_horizon26
+```
+
+Install dependencies for blockchain and backend:
+
+```bash
+# Blockchain
+cd blockchain
 npm install --legacy-peer-deps
+npx hardhat compile
+
+# Backend
+cd ../backend
+npm install
 ```
 
-Project layout (important files)
-- blockchain/
-  - contracts/
-    - TokenizedINR.sol
-    - ShareToken.sol
-    - SettlementEngine.sol
-  - scripts/
-    - deploy.js
-  - test/
-    - SettleX.test.js
-  - hardhat.config.js
-  - package.json
-  - deployed-addresses.json (generated by deploy script)
-  - artifacts/ (generated after compile)
+### Step 2: Start the Local Blockchain (Terminal 1)
 
-How the main flow works (short)
-1. Backend (Person 2) receives a simulated Razorpay/UPI webhook confirming a payment.
-2. Backend calls TokenizedINR.deposit(traderAddress, amount, upiTxnId) as contract owner to mint tINR.
-3. Traders approve the SettlementEngine contract to move their tINR and/or share tokens.
-4. Orders are placed using SettlementEngine.placeOrder(...). When a matching order is found the engine auto-calls settleTrade().
-5. settleTrade() checks approvals, balance, circuit-breakers and transfers tINR from buyer -> seller and shares from seller -> buyer in one atomic transaction.
-6. If any transfer fails, the entire tx reverts — no partial state changes.
+```bash
+cd blockchain
+npx hardhat node
+```
 
-Developer notes & gotchas
-- Approvals: both parties must call approve(token, engineAddress) before a settlement attempt.
-- Owner functions: `deposit()` and `withdraw()` in TokenizedINR are `onlyOwner`. For a local demo, the deployer account is the owner. Backend must sign deposit calls using the owner key (for demo only).
-- Units: quantities and prices in the PoC multiply by 10**18 to use ERC20 decimals. Keep front/backend units consistent.
-- OpenZeppelin version: this repo uses a version where Ownable constructor requires an initial owner, so contracts call `Ownable(msg.sender)` in constructors. If you change OZ version, check constructor signatures.
-- If you get a "stack too deep" compile error, we enabled the IR compiler in `hardhat.config.js` (viaIR: true) to prevent that. Keep the config intact.
+> Keep this terminal running. It provides a local Ethereum node at `http://127.0.0.1:8545`.
 
-Handoff checklist for the backend (Person 2)
-- Clone repo, cd to `blockchain`, npm install, npx hardhat compile.
-- Start local node (`npx hardhat node`) and run the deploy script to get `deployed-addresses.json`.
-- Implement a small Express server:
-  - Endpoint to accept simulated Razorpay webhook and call `TokenizedINR.deposit(traderAddr, amount, txnId)` as owner.
-  - Endpoints to place orders and to query on-chain analytics (read from SettlementEngine).
-- Ensure the backend holds the owner signer (local node or a test private key). Do NOT commit any keys.
+### Step 3: Deploy Smart Contracts (Terminal 2)
 
-Running tests
-- `npx hardhat test` runs the full suite. Tests are written to run against the Hardhat EVM and will pass on a correct setup.
+```bash
+cd blockchain
+npx hardhat run scripts/deploy.js --network localhost
+```
 
-CI suggestion (optional)
-- Add a GitHub Actions workflow that runs `npm ci` and `npx hardhat test` on each PR to ensure changes don’t break the PoC.
+This deploys all contracts and seeds 3 demo traders with tINR and shares. It outputs `deployed-addresses.json`.
 
-Troubleshooting (common issues)
-- ERESOLVE / peer dependency errors during `npm install`:
-  - Run `npm install --legacy-peer-deps` (safe for hackathon PoC).
-- “Invalid character in string” compile error:
-  - Remove Unicode punctuation from solidity strings (use "-" not "—", plain quotes).
-- Hardhat v3 plugin compatibility:
-  - This PoC expects Hardhat 2.x. If a machine runs Hardhat v3 globally, prefer the local project Hardhat by using `npx hardhat` or install hardhat@^2.19.0 in devDependencies.
-- Tests failing on another machine:
-  - Make sure Node v18+, run `npm ci` or `npm install`, then compile and run tests.
+### Step 4: Start the Backend (Terminal 3)
 
-Project roles & next steps (what each person should do)
-- Person 1 (Smart contracts) — Done:
-  - Contracts, tests, deploy script, hardhat config.
-- Person 2 (Backend) — To do:
-  - Razorpay sandbox integration (test keys), webhook handler, call to `deposit()` as owner, orderbook server if needed.
-- Person 3 (Frontend) — To do:
-  - Lightweight UI for trader actions: Approve, Place Order, See Portfolio, Trigger match.
-- Person 4 (Integration & Demo) — To do:
-  - Orchestrate local demo, prepare slides, video, and metrics.
+```bash
+cd backend
+node server.js
+```
 
-Security & ethics
-- This is a demo — do not use real private keys or real money with the scripts provided.
-- Do not commit sensitive API keys or secrets to Git. If you accidentally commit a secret, rotate it immediately and remove it from Git history.
+> Backend starts at `http://localhost:3001`
 
-Contact / Credits
-- Built for Horizon26 hackathon.
-- Team: Person 1 (smart contracts), Person 2 (backend), Person 3 (frontend), Person 4 (integration).
-- If you need help reproducing the environment or resolving CI issues, open an issue in this repo or ping the team lead.
+### Step 5: Open the Frontend
 
-License
-- MIT — feel free to fork and experiment for hackathon/demo purposes.
+Open `frontend/index.html` in your browser. The trader dashboard will connect to the backend automatically.
 
-Enjoy the demo — the core idea is simple, powerful, and demonstrates a path to instant, auditable settlement for tokenized financial assets. If you want, I can also:
-- Add a ready-to-use backend skeleton (Express + Razorpay sandbox handlers),
-- Create a single `run_demo.bat` and `run_demo.sh` that brings up node + deploys automatically,
-- Or polish this README with visuals and a step-by-step slides outline.
-Which would you like next?
+Open `frontend/regulator.html` for the regulator/audit view.
+
+---
+
+## 📂 Project Structure
+
+```
+├── blockchain/
+│   ├── contracts/
+│   │   ├── TokenizedINR.sol      # ERC20 digital INR (mint on deposit, burn on withdrawal)
+│   │   ├── ShareToken.sol        # ERC20 per stock (RELIANCE, TCS, INFY, HDFCBANK)
+│   │   └── SettlementEngine.sol  # Atomic DVP, orderbook, circuit breakers, penalties
+│   ├── scripts/
+│   │   └── deploy.js             # Deploy all contracts + seed demo data
+│   ├── test/
+│   │   └── SettleX.test.js       # Full test suite for settlement flows
+│   ├── hardhat.config.js
+│   └── package.json
+├── backend/
+│   ├── server.js                 # Express REST API
+│   ├── contract.js               # Ethers.js contract bindings
+│   └── package.json
+├── frontend/
+│   ├── index.html                # Trader dashboard
+│   ├── regulator.html            # Regulator dashboard
+│   ├── regulator.js              # Regulator page logic
+│   └── style.css                 # Shared styles
+└── README.md
+```
+
+---
+
+## 🔄 How It Works
+
+1. **Deposit INR** → Backend calls `TokenizedINR.deposit()` → Mints tINR to trader's wallet
+2. **Place Order** → Trader places buy/sell order on `SettlementEngine` → Stored on-chain
+3. **Auto-Match** → Engine finds matching buy/sell orders → Automatically triggers settlement
+4. **Atomic Settlement** → `settleTrade()` transfers shares (seller → buyer) AND tINR (buyer → seller) in one transaction
+5. **Circuit Breaker** → If trade price exceeds band limits, transaction is rejected
+6. **Audit Trail** → All trades are permanently recorded on-chain with timestamps
+
+---
+
+## 🧪 Running Tests
+
+```bash
+cd blockchain
+npx hardhat test
+```
+
+Tests cover:
+- ✅ Atomic swap success (shares + INR swap)
+- ✅ Atomic rollback on failure (insufficient balance)
+- ✅ Circuit breaker triggering (price band violations)
+- ✅ Auto-matching buy/sell orders
+- ✅ tINR minting simulation
+
+---
+
+## 📡 API Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/deposit` | Mint tINR to a trader |
+| POST | `/api/order` | Place buy/sell order |
+| POST | `/api/settle` | Manually settle a trade |
+| GET | `/api/portfolio/:address` | Get trader's tINR + stock balances |
+| GET | `/api/orders` | Get all orders in the order book |
+| GET | `/api/trades` | Get trade history |
+| GET | `/api/analytics` | Get settlement stats + circuit breaker status |
+| GET | `/api/traders` | Get demo trader addresses |
+
+---
+
+## ⚠️ Known Limitations (PoC Scope)
+
+- No real UPI/Razorpay integration (deposit is simulated)
+- No KYC/identity verification
+- No production-grade key management
+- No integration with CDSL/NSDL depositories
+- Circuit breaker cooldown values are demo-only
+- Hardhat local node only (not deployed to testnet)
+
+---
+
+## 🔒 Security Notice
+
+This is a **demo/hackathon project**. Do NOT use real private keys, real money, or real API secrets with this code.
+
+---
+
+## 📜 License
+
+MIT — Free to fork and experiment.
+
+---
+
+## 👥 Team — The Defenders
+
+Built for the **Horizon26 Hackathon**.
