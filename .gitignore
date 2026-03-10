@@ -1,0 +1,9 @@
+node_modules/ 
+package-lock.json 
+artifacts/ 
+cache/ 
+typechain/ 
+ 
+.env 
+.vscode/ 
+.DS_Store 

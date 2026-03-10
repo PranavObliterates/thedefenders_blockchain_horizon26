@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SettleX - Regulator Dashboard</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #0a0a1a; color: #e0e0e0; min-height: 100vh; }
+    nav { background: #111128; padding: 16px 32px; display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #00d4ff; }
+    nav h1 { color: #00d4ff; font-size: 24px; letter-spacing: 2px; }
+    .nav-links a { color: #888; text-decoration: none; margin-left: 24px; font-size: 16px; padding: 8px 16px; border-radius: 6px; transition: all 0.3s; }
+    .nav-links a:hover, .nav-links a.active { color: #00d4ff; background: rgba(0,212,255,0.1); }
+    .container { max-width: 1200px; margin: 24px auto; padding: 0 16px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; margin-bottom: 24px; }
+    .card { background: #111128; border-radius: 12px; padding: 24px; border: 1px solid #222; transition: border-color 0.3s; }
+    .card:hover { border-color: #00d4ff; }
+    .card h2 { color: #00d4ff; font-size: 18px; margin-bottom: 16px; padding-bottom: 8px; border-bottom: 1px solid #222; }
+    .full-width { margin-bottom: 24px; }
+    .stat-card { text-align: center; }
+    .stat-value { font-size: 36px; font-weight: bold; color: #00d4ff; margin-top: 8px; }
+    .stat-value.red { color: #ff4444; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    thead { background: #1a1a2e; }
+    th { padding: 12px 10px; text-align: left; color: #00d4ff; font-weight: 600; border-bottom: 2px solid #333; }
+    td { padding: 10px; border-bottom: 1px solid #1a1a2e; font-family: monospace; font-size: 12px; }
+    tr:hover { background: rgba(0,212,255,0.05); }
+    .status-active { color: #00ff64; }
+    .status-halted { color: #ff4444; font-weight: bold; }
+    .portfolio-card { background: #1a1a2e; padding: 16px; border-radius: 8px; margin-bottom: 12px; border: 1px solid #222; }
+    .portfolio-card h4 { color: #00d4ff; margin-bottom: 8px; }
+    .portfolio-card span { display: inline-block; margin-right: 16px; font-size: 14px; }
+    button { background: #00d4ff; color: #000; border: none; padding: 10px 24px; border-radius: 6px; font-weight: bold; font-size: 14px; cursor: pointer; transition: background 0.3s; margin-top: 8px; }
+    button:hover { background: #00b8d4; }
+    .refresh-btn { display: block; margin: 24px auto; }
+  </style>
+</head>
+<body>
+  <nav>
+    <h1>SettleX</h1>
+    <div class="nav-links">
+      <a href="index.html">Trader</a>
+      <a href="regulator.html" class="active">Regulator</a>
+    </div>
+  </nav>
+
+  <div class="container">
+    <div class="grid">
+      <div class="card stat-card">
+        <h3>Total Trades Settled</h3>
+        <div id="totalSettled" class="stat-value">0</div>
+      </div>
+      <div class="card stat-card">
+        <h3>Total Trades Failed</h3>
+        <div id="totalFailed" class="stat-value red">0</div>
+      </div>
+      <div class="card stat-card">
+        <h3>Total Volume (INR)</h3>
+        <div id="totalVolume" class="stat-value">0</div>
+      </div>
+      <div class="card stat-card">
+        <h3>Order Book Size</h3>
+        <div id="orderBookSize" class="stat-value">0</div>
+      </div>
+    </div>
+
+    <div class="card full-width">
+      <h2>Circuit Breakers</h2>
+      <table id="cbTable">
+        <thead>
+          <tr><th>Stock</th><th>Last Price</th><th>Upper Limit (+10%)</th><th>Lower Limit (-10%)</th><th>Status</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <div class="card full-width">
+      <h2>All Trader Portfolios</h2>
+      <div id="allPortfolios"></div>
+    </div>
+
+    <div class="card full-width">
+      <h2>Full Trade Audit Trail</h2>
+      <table id="auditTable">
+        <thead>
+          <tr><th>ID</th><th>Buyer</th><th>Seller</th><th>Stock</th><th>Qty</th><th>Price</th><th>Total Value</th><th>Timestamp</th><th>Status</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <button onclick="loadAll()" class="refresh-btn">Refresh All Data</button>
+  </div>
+
+  <script>
+    const API = "http://localhost:3001";
+    var traders = {};
+
+    async function loadAll() {
+      await loadAnalytics();
+      await loadPortfolios();
+      await loadAuditTrail();
+    }
+
+    async function loadAnalytics() {
+      try {
+        const res = await fetch(API + "/api/analytics");
+        const data = await res.json();
+        document.getElementById("totalSettled").textContent = data.totalTradesSettled;
+        document.getElementById("totalFailed").textContent = data.totalTradesFailed;
+        document.getElementById("totalVolume").textContent = "INR " + data.totalVolumeINR.toLocaleString();
+        document.getElementById("orderBookSize").textContent = data.orderBookSize;
+        var tbody = document.querySelector("#cbTable tbody");
+        tbody.innerHTML = Object.entries(data.circuitBreakers).map(function(e) {
+          var symbol = e[0]; var cb = e[1];
+          return '<tr><td><strong>' + symbol + '</strong></td><td>INR ' + cb.lastPrice.toLocaleString() + '</td><td>INR ' + cb.upperLimit.toLocaleString() + '</td><td>INR ' + cb.lowerLimit.toLocaleString() + '</td><td class="' + (cb.isHalted ? 'status-halted' : 'status-active') + '">' + (cb.isHalted ? 'HALTED' : 'ACTIVE') + '</td></tr>';
+        }).join("");
+      } catch(e) { console.error(e); }
+    }
+
+    async function loadPortfolios() {
+      try {
+        const res = await fetch(API + "/api/traders");
+        traders = await res.json();
+        var div = document.getElementById("allPortfolios");
+        div.innerHTML = "";
+        for (var name in traders) {
+          var addr = traders[name];
+          var pRes = await fetch(API + "/api/portfolio/" + addr);
+          var p = await pRes.json();
+          var stockInfo = Object.entries(p.stocks).map(function(e) { return '<span><strong>' + e[0] + ':</strong> ' + parseFloat(e[1]).toLocaleString() + '</span>'; }).join("");
+          div.innerHTML += '<div class="portfolio-card"><h4>' + name + ' — ' + addr.slice(0,10) + '...' + addr.slice(-4) + '</h4><span><strong>tINR:</strong> INR ' + parseFloat(p.tINR).toLocaleString() + '</span>' + stockInfo + '</div>';
+        }
+      } catch(e) { console.error(e); }
+    }
+
+    async function loadAuditTrail() {
+      try {
+        const res = await fetch(API + "/api/trades");
+        const trades = await res.json();
+        var tbody = document.querySelector("#auditTable tbody");
+        if (trades.length === 0) { tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#666">No trades recorded</td></tr>'; return; }
+        tbody.innerHTML = trades.map(function(t) { return '<tr><td>' + t.tradeId + '</td><td>' + t.buyer.slice(0,8) + '...' + t.buyer.slice(-4) + '</td><td>' + t.seller.slice(0,8) + '...' + t.seller.slice(-4) + '</td><td>' + t.stockSymbol + '</td><td>' + t.quantity + '</td><td>INR ' + t.pricePerShare.toLocaleString() + '</td><td>INR ' + t.totalValue.toLocaleString() + '</td><td>' + new Date(t.timestamp * 1000).toLocaleString() + '</td><td class="status-active">' + t.status + '</td></tr>'; }).join("");
+      } catch(e) { console.error(e); }
+    }
+
+    loadAll();
+  </script>
+</body>
+</html>
